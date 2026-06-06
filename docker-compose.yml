@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # Base de données MongoDB globale
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb_container
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - AppNetwork
+
+  # Service de gestion des livres (Port interne 3001)
+  livre-service:
+    build: ./livre-service
+    container_name: livre_service_container
+    ports:
+      - "3001:3001"
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017/bibliotheque_livres
+    depends_on:
+      - mongodb
+    networks:
+      - AppNetwork
+
+  # Service de gestion des membres (Port interne 3002)
+  membre-service:
+    build: ./membre-service
+    container_name: membre_service_container
+    ports:
+      - "3002:3002"
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017/bibliotheque_membres
+    depends_on:
+      - mongodb
+    networks:
+      - AppNetwork
+
+  # Service orchestrateur des emprunts (Port interne 3003)
+  emprunt-service:
+    build: ./emprunt-service
+    container_name: emprunt_service_container
+    ports:
+      - "3003:3003"
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017/bibliotheque_emprunts
+      - LIVRE_SERVICE_URL=http://livre-service:3001
+      - MEMBRE_SERVICE_URL=http://membre-service:3002
+    depends_on:
+      - mongodb
+      - livre-service
+      - membre-service
+    networks:
+      - AppNetwork
+
+  # Passerelle API Gateway - Point d'entrée public (Port 3000)
+  gateway:
+    build: ./gateway
+    container_name: api_gateway_container
+    ports:
+      - "3000:3000"
+    environment:
+      - LIVRE_SERVICE_URL=http://livre-service:3001
+      - MEMBRE_SERVICE_URL=http://membre-service:3002
+      - EMPRUNT_SERVICE_URL=http://emprunt-service:3003
+    depends_on:
+      - livre-service
+      - membre-service
+      - emprunt-service
+    networks:
+      - AppNetwork
+
+volumes:
+  mongo_data:
+
+networks:
+  AppNetwork:
+    driver: bridge
